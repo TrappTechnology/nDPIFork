@@ -30,7 +30,7 @@
 #define __NDPI_UTIL_H__
 
 #include "../src/lib/third_party/include/uthash.h"
-#include "../windows/WpdPack/Include/pcap.h"
+#include "../windows/WpdPack/Include/pcap/pcap.h"
 #include "ndpi_includes.h"
 #include "ndpi_classify.h"
 #include "ndpi_typedefs.h"
