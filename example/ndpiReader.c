@@ -28,7 +28,7 @@
 #include "../src/lib/third_party/include/uthash.h"
 #include "../src/lib/third_party/include/ahocorasick.h"
 
-#include "ReadJson.h"
+#include "ReadJsonConfiguration.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -69,6 +69,9 @@
 #define htonl64(x) ntohl64(x)
 
 #define HEURISTICS_CODE 1
+#define TRUE 1
+#define FALSE 0
+#define bool int
 
 /** Client parameters **/
 
@@ -110,6 +113,7 @@ char* generated_tmp_json_files_alerts[MAX_NUMBER_OF_FILES];
 char* generated_json_files_events[MAX_NUMBER_OF_FILES];
 char* generated_json_files_alerts[MAX_NUMBER_OF_FILES];
 int number_of_valid_files_found = 0;
+int current_file_index = -1;
 /*--------------------------------------Ashwani end--------------------------------------------*/
 
 /** User preferences **/
@@ -967,114 +971,132 @@ static int parse_two_unsigned_integer(char *param, u_int32_t *num1, u_int32_t *n
 // Ashwani:
 // This gets all the valid pcap and pcapng files located at specified pCap files location
 //
-void fetchFilesToProcess() 
+void fetchFilesToProcess()
 {
 #ifdef WIN32
     WIN32_FIND_DATA find_data;
     HANDLE hFind = FindFirstFile(pCapFilesSearchString, &find_data);
 
-    if (hFind == INVALID_HANDLE_VALUE) 
+    if (hFind == INVALID_HANDLE_VALUE)
     {
         perror("Error opening directory");
         return;
     }
 
+    for (int i = 0; i < number_of_valid_files_found; i++) 
+    {
+        free(generated_tmp_json_files_events[i]);
+        free(generated_tmp_json_files_alerts[i]);
+        free(generated_json_files_events[i]);
+        free(generated_json_files_alerts[i]);
+    }
+
     number_of_valid_files_found = 0;
 
-	do 
+    do
     {
-		if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-		{
-			continue; // Skip directories
-		}
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            continue; // Skip directories
+        }
 
-		const char* filename = find_data.cFileName;
-		const char* extension_pcap = ".pcap";
-		size_t ext_length_pcap = strlen(extension_pcap);
+        const char* filename = find_data.cFileName;
+        const char* extension_pcap = ".pcap";
+        size_t ext_length_pcap = strlen(extension_pcap);
 
-		const char* extension_pcapng = ".pcapng";
-		size_t ext_length_pcapng = strlen(extension_pcapng);
-		size_t file_length = strlen(filename);
+        const char* extension_pcapng = ".pcapng";
+        size_t ext_length_pcapng = strlen(extension_pcapng);
+        size_t file_length = strlen(filename);
 
-		if (file_length >= ext_length_pcap && strcmp(filename + file_length - ext_length_pcap, extension_pcap) == 0 ||
-			file_length >= ext_length_pcapng && strcmp(filename + file_length - ext_length_pcapng, extension_pcapng) == 0)
-		{
-			char* pcapFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-			if (pcapFileFullPath == NULL)
-			{
-				perror("Memory allocation error");
-				FindClose(hFind);
-				return;
-			}
-
-			sprintf(pcapFileFullPath, "%s\\%s", pCapFilesFolderLocationPath, filename);
-
-			char* dot = strrchr(filename, '.');
-			if (dot != NULL)
-			{
-				*dot = '\0'; // Replace the dot with the null terminator
-			}
-
-			char* eventJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-			if (eventJsonFileFullPath == NULL)
-			{
-				perror("Memory allocation error");
-				FindClose(hFind);
-				return;
-			}
-
-			pcap_files[number_of_valid_files_found] = pcapFileFullPath;
-
-			sprintf(eventJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Events", filename, "json");
-			generated_json_files_events[number_of_valid_files_found] = eventJsonFileFullPath;
-
-			char* eventTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-			if (eventTmpJsonFileFullPath == NULL)
-			{
-				perror("Memory allocation error");
-				FindClose(hFind);
-				return;
-			}
-
-
-			sprintf(eventTmpJsonFileFullPath, "%s.%s", eventJsonFileFullPath, "tmp");
-			generated_tmp_json_files_events[number_of_valid_files_found] = eventTmpJsonFileFullPath;
-
-			char* alertJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-			if (alertJsonFileFullPath == NULL)
-			{
-				perror("Memory allocation error");
-				FindClose(hFind);
-				return;
-			}
-
-			sprintf(alertJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Alerts", filename, "json");
-			generated_json_files_alerts[number_of_valid_files_found] = alertJsonFileFullPath;
-
-			char* alertTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-			if (alertTmpJsonFileFullPath == NULL)
-			{
-				perror("Memory allocation error");
-				FindClose(hFind);
-				return;
-			}
-
-			sprintf(alertTmpJsonFileFullPath, "%s.%s", alertJsonFileFullPath, "tmp");
-			generated_tmp_json_files_alerts[number_of_valid_files_found] = alertTmpJsonFileFullPath;
-
-			number_of_valid_files_found++;
-
-			if (number_of_valid_files_found >= MAX_NUMBER_OF_FILES) 
+        if (file_length >= ext_length_pcap && strcmp(filename + file_length - ext_length_pcap, extension_pcap) == 0 ||
+            file_length >= ext_length_pcapng && strcmp(filename + file_length - ext_length_pcapng, extension_pcapng) == 0)
+        {
+            char* pcapFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (pcapFileFullPath == NULL)
             {
-				fprintf(serializationLogFile, "ERROR: Maximum number of files reached (%d), some files may be omitted.\n", MAX_NUMBER_OF_FILES);
-				break;
-			}
-		}
+                perror("Memory allocation error");
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(pcapFileFullPath, "%s\\%s", pCapFilesFolderLocationPath, filename);
+
+            char* dot = strrchr(filename, '.');
+            if (dot != NULL)
+            {
+                *dot = '\0'; // Replace the dot with the null terminator
+            }
+
+            char* eventJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (eventJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            pcap_files[number_of_valid_files_found] = pcapFileFullPath;
+
+            sprintf(eventJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Events", filename, "json");
+            generated_json_files_events[number_of_valid_files_found] = eventJsonFileFullPath;
+
+            char* eventTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (eventTmpJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(eventTmpJsonFileFullPath, "%s.%s", eventJsonFileFullPath, "tmp");
+            generated_tmp_json_files_events[number_of_valid_files_found] = eventTmpJsonFileFullPath;
+
+            char* alertJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (alertJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                free(eventTmpJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(alertJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Alerts", filename, "json");
+            generated_json_files_alerts[number_of_valid_files_found] = alertJsonFileFullPath;
+
+            char* alertTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (alertTmpJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                free(eventTmpJsonFileFullPath); // Free previously allocated memory
+                free(alertJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(alertTmpJsonFileFullPath, "%s.%s", alertJsonFileFullPath, "tmp");
+            generated_tmp_json_files_alerts[number_of_valid_files_found] = alertTmpJsonFileFullPath;
+
+            number_of_valid_files_found++;
+
+            if (number_of_valid_files_found >= MAX_NUMBER_OF_FILES)
+            {
+                fprintf(serializationLogFile, "ERROR: Maximum number of files reached (%d), some files may be omitted.\n", MAX_NUMBER_OF_FILES);
+                break;
+            }
+        }
     } while (FindNextFile(hFind, &find_data) != 0);
 
     FindClose(hFind);
 #endif
 }
+
 
 /*-----------------------------------------------------------------------------------------------------*/
 // Ashwani:
@@ -1514,6 +1536,7 @@ static void parseOptions(int argc, char **argv) {
     printf("Serializing detection results to a file requires command line arguments `-k'\n");
     exit(1);
   }
+
   if (serialization_fp != NULL && serialization_format == ndpi_serialization_format_unknown)
   {
     serialization_format = ndpi_serialization_format_json;
@@ -2181,39 +2204,18 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
 
 static void printFlowSerialized(u_int16_t thread_id, struct ndpi_flow_info* flow)
 {
+    if (!IsValidFlowForLogging(flow))
+    {
+        return ;
+    }
+
     char* json_str = NULL;
     u_int32_t json_str_len = 0;
     ndpi_serializer* const serializer = &flow->ndpi_flow_serializer;
     //float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
     double f = (double)flow->first_seen_ms, l = (double)flow->last_seen_ms;
     float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
-
-    if (!isValidFlowForLogging(flow))
-    {
-        return ;
-    }
-
-    if (needToRecordRisk)
-    {
-        if (!flow->risk_str)
-        {           
-            return;
-        }
-
-        ndpi_serialize_start_of_block(serializer, "event");
-        ndpi_serialize_string_string(serializer, "kind", "alert");
-        ndpi_serialize_end_of_block(serializer);
-    }
-    else
-    {
-        ndpi_serialize_start_of_block(serializer, "event");
-        ndpi_serialize_string_string(serializer, "kind", "event");
-        ndpi_serialize_end_of_block(serializer);
-    }
-
-	ndpi_serialize_start_of_block(serializer, "flow");
-	ndpi_serialize_string_uint32(serializer, "id", flow->hashval);
-	ndpi_serialize_end_of_block(serializer);
+	ndpi_serialize_string_uint32(serializer, "flow_id", flow->hashval);
 
     time_t start_seconds = f / 1000;
     struct tm* timeinfo;
@@ -2343,7 +2345,7 @@ static void printFlowSerialized(u_int16_t thread_id, struct ndpi_flow_info* flow
 	/* TCP window */
 	ndpi_serialize_string_uint32(serializer, "c_to_s_init_win", flow->c_to_s_init_win);
 	ndpi_serialize_string_uint32(serializer, "s_to_c_init_win", flow->s_to_c_init_win);
- 
+
     json_str = ndpi_serializer_get_buffer(serializer, &json_str_len);
     if (json_str == NULL || json_str_len == 0)
     {
@@ -2351,7 +2353,73 @@ static void printFlowSerialized(u_int16_t thread_id, struct ndpi_flow_info* flow
         exit(-1);
     }
 
-    fprintf(serialization_fp, "%.*s\n", (int)json_str_len, json_str);
+    char* converted_json_str = NULL;
+    int createAlert = 0;
+    ConvertnDPIDataFormat(json_str, &converted_json_str, &createAlert);
+
+    if (converted_json_str != NULL)
+    {
+        int length = strlen(converted_json_str);
+
+        if (length != 0)
+        {
+            if (createAlert)
+            {
+                serialization_fp = fopen(generated_tmp_json_files_alerts[current_file_index], "a");
+                if (serialization_fp == NULL)
+                {
+                    fprintf(serializationLogFile, "Unable to create file %s: %s\n", generated_tmp_json_files_alerts[current_file_index], strerror(errno));
+#ifdef WIN32
+                    if (_isatty(_fileno(stdin)))
+                    {
+                        printf("Unable to create file %s: %s\n", generated_tmp_json_files_alerts[current_file_index], strerror(errno));
+                    }
+#endif
+                }
+                else
+                {
+                    int length = strlen(converted_json_str);
+                    fprintf(serialization_fp, "%.*s\n", (int)length, converted_json_str);
+                    fclose(serialization_fp);
+                }
+            }
+
+            char* converted_json_str_no_risk = NULL;
+            if (createAlert)
+            {
+                DeletenDPIRisk(converted_json_str, &converted_json_str_no_risk);
+            }
+
+            serialization_fp = fopen(generated_tmp_json_files_events[current_file_index], "a");
+            if (serialization_fp == NULL)
+            {
+                fprintf(serializationLogFile, "Unable to create file %s: %s\n", generated_tmp_json_files_events[current_file_index], strerror(errno));
+#ifdef WIN32
+                if (_isatty(_fileno(stdin)))
+                {
+                    printf("Unable to create file %s: %s\n", generated_tmp_json_files_events[current_file_index], strerror(errno));
+                }
+#endif
+            }
+            else
+            {
+                if (createAlert)
+                {
+                    int length = strlen(converted_json_str_no_risk);
+                    fprintf(serialization_fp, "%.*s\n", (int)length, converted_json_str_no_risk);
+                }
+                else
+                {
+                    int length = strlen(converted_json_str);
+                    fprintf(serialization_fp, "%.*s\n", (int)length, converted_json_str);
+                }
+                fclose(serialization_fp);
+            }
+            free(converted_json_str_no_risk);
+        }
+    }
+
+    free(converted_json_str);
 }
 
 /* ********************************** */
@@ -3966,8 +4034,7 @@ static void printFlowsStats() {
       printFlow(i+1, all_flows[i].flow, all_flows[i].thread_id);
   }
 
-  if (serialization_fp != NULL &&
-      serialization_format != ndpi_serialization_format_unknown)
+  if (serialization_format != ndpi_serialization_format_unknown)
   {
     unsigned int i;
 
@@ -4906,40 +4973,8 @@ void test_lib() {
   int status;
   void * thd_res;
 
-  /* Running processing threads */
-  for(thread_id = 0; thread_id < num_threads; thread_id++) {
-    status = pthread_create(&ndpi_thread_info[thread_id].pthread, NULL, processing_thread, (void *) thread_id);
-    /* check pthreade_create return value */
-    if(status != 0) {
-#ifdef WIN64
-      fprintf(stderr, "error on create %lld thread\n", thread_id);
-#else
-      fprintf(stderr, "error on create %ld thread\n", thread_id);
-#endif
-      exit(-1);
-    }
-  }
-  /* Waiting for completion */
-  for(thread_id = 0; thread_id < num_threads; thread_id++) {
-    status = pthread_join(ndpi_thread_info[thread_id].pthread, &thd_res);
-    /* check pthreade_join return value */
-    if(status != 0) {
-#ifdef WIN64
-      fprintf(stderr, "error on join %lld thread\n", thread_id);
-#else
-      fprintf(stderr, "error on join %ld thread\n", thread_id);
-#endif
-      exit(-1);
-    }
-    if(thd_res != NULL) {
-#ifdef WIN64
-      fprintf(stderr, "error on returned value of %lld joined thread\n", thread_id);
-#else
-      fprintf(stderr, "error on returned value of %ld joined thread\n", thread_id);
-#endif
-      exit(-1);
-    }
-  }
+  thread_id = 0;
+  processing_thread((void*)thread_id);
 
 #ifdef USE_DPDK
   dpdk_port_deinit(dpdk_port_id);
@@ -6091,18 +6126,19 @@ int main(int argc, char **argv)
       }
 
       // (MM.DD.YYYY.V)
-      fprintf(serializationLogFile, "nDPI Version 03.11.2024.1 - Configuration files moved to Settings\nDPIConfiguration.json\n");
+      fprintf(serializationLogFile, "nDPI Version 04.05.2024.1 - Reversed changes made to nDPI code\n");
        #ifdef WIN32
           if (_isatty(_fileno(stdin)))
           {
-              printf("nDPI Version 03.11.2024.1 - Configuration files moved to Settings\nDPIConfiguration.json\n");
+              printf("nDPI Version 04.05.2024.1 - Reversed changes made to nDPI code\n");
           }
       #endif
 
 
       skip_unit_tests = true;
 
-      if(!skip_unit_tests) {
+      if(!skip_unit_tests) 
+      {
     #ifndef DEBUG_TRACE
         /* Skip tests when debugging */
 
@@ -6196,7 +6232,6 @@ int main(int argc, char **argv)
               }
       #endif
      
-
       int size = strlen(pCapFilesFolderLocationPath) + strlen("\\*.*");
 
       pCapFilesSearchString = (char*)malloc(size * sizeof(char));
@@ -6266,6 +6301,8 @@ int main(int argc, char **argv)
           }
       #endif
 
+      free(alertFolder);
+
       int eventFolderSize = strlen(moduleFolderPath) + strlen("Events");
       char* eventFolder = (char*)malloc(alertFolderSize * sizeof(char));
       if (eventFolder == 0)
@@ -6308,10 +6345,13 @@ int main(int argc, char **argv)
           }
       #endif
 
+     free(eventFolder);    
+
       do
       {
-          number_of_valid_files_found = 0;
           fetchFilesToProcessAndSetDefaultOptions();
+          static loopCounter = 0;
+          loopCounter++;
 
           fprintf(serializationLogFile, "STARTING FILE PROCESSING\n");
           #ifdef WIN32
@@ -6323,208 +6363,149 @@ int main(int argc, char **argv)
         
           serialization_format = ndpi_serialization_format_json;
 
-          int index = 0;
-          for (index = 0; index < number_of_valid_files_found; index++)
-          {
-              int count = 0;
-              for (count = 0; count < 2; count++)
+          current_file_index = 0;
+		  for (current_file_index = 0; current_file_index < number_of_valid_files_found; current_file_index++)
+		  {
+			  gettimeofday(&startup_time, NULL);
+			  memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
+
+			  if (getenv("AHO_DEBUG"))
+			  {
+				  ac_automata_enable_debug(1);
+			  }
+
+			  _pcap_file[0] = pcap_files[current_file_index];
+
+			  struct ndpi_detection_module_struct* ndpi_info_mod = ndpi_init_detection_module(init_prefs);
+
+			  if (ndpi_info_mod == NULL)
+			  {
+				  return -1;
+			  }
+
+			  if (domain_to_check) 
               {
-                  if (count == 0)
+				  fclose(serializationLogFile);
+				  ndpiCheckHostStringMatch(domain_to_check);
+				  exit(0);
+			  }
+
+			  if (!quiet_mode)
+			  {
+				  printf("\n-----------------------------------------------------------\n"
+					  "* NOTE: This is demo app to show *some* nDPI features.\n"
+					  "* In this demo we have implemented only some basic features\n"
+					  "* just to show you what you can do with the library. Feel \n"
+					  "* free to extend it and send us the patches for inclusion\n"
+					  "------------------------------------------------------------\n\n");
+
+				  printf("Using nDPI (%s) [%d thread(s)]\n", ndpi_revision(), num_threads);
+
+				  const char* gcrypt_ver = ndpi_get_gcrypt_version();
+				  if (gcrypt_ver)
+					  printf("Using libgcrypt version %s\n", gcrypt_ver);
+			  }
+
+			  signal(SIGINT, sigproc);
+
+              printf("Processing (%s) [Start]\n", _pcap_file[0]);
+			  for (i = 0; i < num_loops; i++)
+			  {
+				  test_lib();
+			  }
+
+              printf("\n\tProcessing (%s) [End]\n", _pcap_file[0]);
+
+              serialization_fp = fopen(generated_tmp_json_files_events[current_file_index], "r");
+              if (serialization_fp != NULL)
+              {
+                  fclose(serialization_fp);
+                  if (rename(generated_tmp_json_files_events[current_file_index], generated_json_files_events[current_file_index]) != 0)
                   {
-                      needToRecordRisk = false;
-                      ndpi_record_risk(needToRecordRisk);
-                  }
-
-                  gettimeofday(&startup_time, NULL);
-                  memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
-
-                  if (getenv("AHO_DEBUG"))
-                  {
-                      ac_automata_enable_debug(1);
-                  }
-
-                  _pcap_file[0] = pcap_files[index];
-
-                  if (count == 0)
-                  {
-                      fprintf(serializationLogFile, "%3d. Generating - %s, (START)", index, generated_tmp_json_files_events[index]);
+                      fprintf(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[current_file_index]);
                       #ifdef WIN32
                           if (_isatty(_fileno(stdin)))
                           {
-                              printf("%3d. Generating - %s, (START)", index, generated_tmp_json_files_events[index]);
+                              printf("Error renaming - %s file", generated_tmp_json_files_events[current_file_index]);
                           }
-                      #endif
-                    
+                      #endif  
 
-                      serialization_fp = fopen(generated_tmp_json_files_events[index], "w");
+                      remove(generated_json_files_events[current_file_index]);
+                      fprintf(serializationLogFile, "deleted existing file - %s \n", generated_json_files_events[current_file_index]);
+                      #ifdef WIN32
+                          if (_isatty(_fileno(stdin)))
+                          {
+                              printf("deleted existing file - %s \n", generated_json_files_events[current_file_index]);
+                          }
+                      #endif  
 
-                      if (serialization_fp == NULL)
+                      if (rename(generated_tmp_json_files_events[current_file_index], generated_json_files_events[current_file_index]) != 0)
                       {
-                          fprintf(serializationLogFile, "Unable to write on serialization file %s: %s\n", generated_tmp_json_files_events[index], strerror(errno));
+                          fprintf(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[current_file_index]);
+                          #ifdef WIN32
+                          if (_isatty(_fileno(stdin)))
+                          {
+                              printf("Error renaming - %s file", generated_tmp_json_files_events[current_file_index]);
+                          }
+                          #endif  
+                      }                           
+                  }
+
+                  serialization_fp = fopen(generated_tmp_json_files_alerts[current_file_index], "r");
+                  if (serialization_fp != NULL)
+                  {
+                      fclose(serialization_fp);
+                      if (rename(generated_tmp_json_files_alerts[current_file_index], generated_json_files_alerts[current_file_index]) != 0)
+                      {
+                          fprintf(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[current_file_index]);
                           #ifdef WIN32
                               if (_isatty(_fileno(stdin)))
                               {
-                                  printf("Unable to write on serialization file %s: %s\n", generated_tmp_json_files_events[index], strerror(errno));
+                                  printf("Error renaming - %s file", generated_tmp_json_files_alerts[current_file_index]);
                               }
-                          #endif
-                         
-                          continue;
-                      }
-                  }
-                  else
-                  {
-                      fprintf(serializationLogFile, "%3d. Generating - %s, (START)", index, generated_tmp_json_files_alerts[index]);
-                      #ifdef WIN32
-                          if (_isatty(_fileno(stdin)))
-                          {
-                              printf("%3d. Generating - %s, (START)", index, generated_tmp_json_files_alerts[index]);
-                          }
-                      #endif
-                    
+                          #endif  
 
-                      serialization_fp = fopen(generated_tmp_json_files_alerts[index], "w");
-
-                      if (serialization_fp == NULL)
-                      {
-                          fprintf(serializationLogFile, "Unable to write on serialization file %s: %s\n", generated_tmp_json_files_alerts[index], strerror(errno));
+                          remove(generated_json_files_alerts[current_file_index]);
+                          fprintf(serializationLogFile, "deleted existing file - %s \n", generated_json_files_alerts[current_file_index]);
                           #ifdef WIN32
                               if (_isatty(_fileno(stdin)))
                               {
-                                  printf("Unable to write on serialization file %s: %s\n", generated_tmp_json_files_alerts[index], strerror(errno));
+                                  printf("deleted existing file - %s \n", generated_json_files_alerts[current_file_index]);
                               }
-                          #endif
-                        
-                          continue;
-                      }
-                  }
+                          #endif  
 
-                  struct ndpi_detection_module_struct* ndpi_info_mod = ndpi_init_detection_module(init_prefs);
-
-                  if (ndpi_info_mod == NULL)
-                  {
-                      return -1;
-                  }
-
-                  if (domain_to_check) {
-                      fclose(serializationLogFile);
-                      ndpiCheckHostStringMatch(domain_to_check);
-                      exit(0);
-                  }
-
-                  if (!quiet_mode)
-                  {
-                      printf("\n-----------------------------------------------------------\n"
-                          "* NOTE: This is demo app to show *some* nDPI features.\n"
-                          "* In this demo we have implemented only some basic features\n"
-                          "* just to show you what you can do with the library. Feel \n"
-                          "* free to extend it and send us the patches for inclusion\n"
-                          "------------------------------------------------------------\n\n");
-
-                      printf("Using nDPI (%s) [%d thread(s)]\n", ndpi_revision(), num_threads);
-
-                      const char* gcrypt_ver = ndpi_get_gcrypt_version();
-                      if (gcrypt_ver)
-                          printf("Using libgcrypt version %s\n", gcrypt_ver);
-                  }
-
-                  signal(SIGINT, sigproc);
-
-                  for (i = 0; i < num_loops; i++)
-                  {
-                      test_lib();
-                  }
-
-                  if (results_path)  ndpi_free(results_path);
-                  if (results_file)  fclose(results_file);
-                  if (extcap_dumper) pcap_dump_close(extcap_dumper);
-                  if (extcap_fifo_h) pcap_close(extcap_fifo_h);
-                  if (ndpi_info_mod) ndpi_exit_detection_module(ndpi_info_mod);
-                  if (enable_malloc_bins)
-                      ndpi_free_bin(&malloc_bins);
-                  if (csv_fp)        fclose(csv_fp);
-                  ndpi_free(_debug_protocols);
-                  ndpi_free(_disabled_protocols);
-
-                  if (isFileEmpty(serialization_fp))
-                  {
-                      fclose(serialization_fp);
-                      if (count == 0)
-                      {
-                          remove(generated_tmp_json_files_events[index]);
-                      }
-                      else
-                      {
-                          remove(generated_tmp_json_files_alerts[index]);
-                      }
-                  }
-                  else
-                  {
-                      fclose(serialization_fp);
-                      if (count == 0)
-                      {
-                          if (rename(generated_tmp_json_files_events[index], generated_json_files_events[index]) != 0)
+                          if (rename(generated_tmp_json_files_alerts[current_file_index], generated_json_files_alerts[current_file_index]) != 0)
                           {
-                              fprintf(serializationLogFile, "Error renaming - %s file",  generated_tmp_json_files_events[index]);
+                              fprintf(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[current_file_index]);
                               #ifdef WIN32
                                   if (_isatty(_fileno(stdin)))
                                   {
-                                      printf("Error renaming - %s file", generated_tmp_json_files_events[index]);
+                                      printf("Error renaming - %s file", generated_tmp_json_files_alerts[current_file_index]);
                                   }
-                              #endif                             
+                             #endif  
                           }
                       }
-                      else
-                      {
-                          if (rename(generated_tmp_json_files_alerts[index], generated_json_files_alerts[index]) != 0)
-                          {
-                              fprintf(serializationLogFile, "Error renaming - %s file",  generated_tmp_json_files_alerts[index]);
-                              #ifdef WIN32
-                                  if (_isatty(_fileno(stdin)))
-                                  {
-                                      printf("Error renaming - %s file", generated_tmp_json_files_alerts[index]);
-                                  }
-                              #endif                             
-                          }
-                      }
-                  }
-
-                  if (count == 0)
-                  {
-                      needToRecordRisk = true;
-                      ndpi_record_risk(needToRecordRisk);
-
-                      fprintf(serializationLogFile, "\n\t\t%s, (END)\n", generated_tmp_json_files_events[index]);
-                      #ifdef WIN32
-                          if (_isatty(_fileno(stdin)))
-                          {
-                              printf("\n\t\t%s, (END)\n", generated_tmp_json_files_events[index]);
-                          }
-                      #endif
-                     
-                  }
-                  else
-                  {
-                      fprintf(serializationLogFile, "\n\t\t%s, (END)\n", generated_tmp_json_files_alerts[index]);
-                      #ifdef WIN32
-                          if (_isatty(_fileno(stdin)))
-                          {
-                              printf("\n\t\t%s, (END)\n", generated_tmp_json_files_alerts[index]);
-                          }
-                      #endif                      
                   }
               }
 
-              //fprintf(serializationLogFile, "--(END)\n");
-              //if (_isatty(_fileno(stdin)))
-              //{
-              //    printf("--(END)\n");
-              //}
-              remove(_pcap_file[0]);
-              pcap_files[index] = "";
-          }
-      } while (true);
+			  //if (results_path)  ndpi_free(results_path);
+			  if (results_file)  fclose(results_file);
+			  if (extcap_dumper) pcap_dump_close(extcap_dumper);
+			  if (extcap_fifo_h) pcap_close(extcap_fifo_h);
+			  if (ndpi_info_mod) ndpi_exit_detection_module(ndpi_info_mod);
+			  if (enable_malloc_bins)
+				  ndpi_free_bin(&malloc_bins);
+			  if (csv_fp)        fclose(csv_fp);
+			  ndpi_free(_debug_protocols);
+			  ndpi_free(_disabled_protocols);
 
-      fclose(serializationLogFile);
+			  //remove(_pcap_file[0]);
+			  free(pcap_files[current_file_index]);
+              pcap_files[current_file_index] = NULL;
+		  }
+	  } while (true);
+
+	  fclose(serializationLogFile);
 
     #ifdef DEBUG_TRACE
       if(trace) fclose(trace);
