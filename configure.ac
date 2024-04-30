@@ -297,7 +297,7 @@ case "$host" in
       elif test "${with_only_libndpi+set}" != set; then :
          AC_CHECK_LIB([pcap], [pcap_open_live], [PCAP_LIB="-lpcap"])
          if test $ac_cv_lib_pcap_pcap_open_live = "no"; then :
-            AC_MSG_ERROR([Missing libpcap(-dev) library required to compile the example application.])
+            #AC_MSG_ERROR([Missing libpcap(-dev) library required to compile the example application.])
          fi
       fi
       EXE_SUFFIX=""
